@@ -85,14 +85,19 @@ def get_payment_report(
     partial_payments_total = 0.0
 
     by_method_map: dict[str, float] = {}
+    by_method_count: dict[str, int] = {}
     by_type_map: dict[str, float] = {}
+    by_type_count: dict[str, int] = {}
     by_month_map = {m: 0.0 for m in range(1, 13)}
+    by_month_count = {m: 0 for m in range(1, 13)}
     by_day_map: dict[int, float] = {}
+    by_day_count: dict[int, int] = {}
 
     if year and month:
         _, num_days = calendar.monthrange(year, month)
         for d in range(1, num_days + 1):
             by_day_map[d] = 0.0
+            by_day_count[d] = 0
 
     payments_list = []
 
@@ -108,17 +113,21 @@ def get_payment_report(
             partial_payments_total += amt
 
         by_type_map[ptype] = by_type_map.get(ptype, 0.0) + amt
+        by_type_count[ptype] = by_type_count.get(ptype, 0) + 1
 
         # Payment method
         pmethod = payment.payment_method.value if hasattr(payment.payment_method, "value") else str(payment.payment_method)
         by_method_map[pmethod] = by_method_map.get(pmethod, 0.0) + amt
+        by_method_count[pmethod] = by_method_count.get(pmethod, 0) + 1
 
         # Date breakdown
         pdate = _parse_date(payment.payment_date)
         if pdate:
             by_month_map[pdate.month] = by_month_map.get(pdate.month, 0.0) + amt
+            by_month_count[pdate.month] = by_month_count.get(pdate.month, 0) + 1
             if year and month and pdate.year == year and pdate.month == month:
                 by_day_map[pdate.day] = by_day_map.get(pdate.day, 0.0) + amt
+                by_day_count[pdate.day] = by_day_count.get(pdate.day, 0) + 1
 
         payments_list.append({
             "id": payment.id,
@@ -144,6 +153,7 @@ def get_payment_report(
             "month": m,
             "month_name": month_names[m - 1],
             "total_amount": round(by_month_map[m], 2),
+            "transaction_count": by_month_count[m],
         }
         for m in range(1, 13)
     ]
@@ -155,6 +165,7 @@ def get_payment_report(
                 "day": d,
                 "label": f"{d} {month_names[month - 1]}",
                 "total_amount": round(by_day_map.get(d, 0.0), 2),
+                "transaction_count": by_day_count.get(d, 0),
             }
             for d in sorted(by_day_map.keys())
         ]
@@ -165,6 +176,7 @@ def get_payment_report(
             "label": method.replace("_", " ").title(),
             "total_amount": round(amt, 2),
             "percentage": round((amt / total_earnings * 100), 1) if total_earnings > 0 else 0.0,
+            "transaction_count": by_method_count.get(method, 0),
         }
         for method, amt in by_method_map.items()
     ]
@@ -175,6 +187,7 @@ def get_payment_report(
             "label": ptype.title() + " Payment",
             "total_amount": round(amt, 2),
             "percentage": round((amt / total_earnings * 100), 1) if total_earnings > 0 else 0.0,
+            "transaction_count": by_type_count.get(ptype, 0),
         }
         for ptype, amt in by_type_map.items()
     ]

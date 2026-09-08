@@ -32,6 +32,14 @@ const formatCurrency = (val: number) => {
   }).format(val || 0);
 };
 
+const formatCompactCurrency = (val: number) => {
+  if (!val || val === 0) return "₹0";
+  if (val >= 10000000) return `₹${(val / 10000000).toFixed(val % 10000000 === 0 ? 0 : 2)}Cr`;
+  if (val >= 100000) return `₹${(val / 100000).toFixed(val % 100000 === 0 ? 0 : 1)}L`;
+  if (val >= 1000) return `₹${(val / 1000).toFixed(val % 1000 === 0 ? 0 : 1)}k`;
+  return `₹${Math.round(val)}`;
+};
+
 const MONTHS = [
   { value: "all", label: "All Months" },
   { value: "1", label: "January" },
@@ -490,11 +498,23 @@ export default function PaymentReportPage() {
                     </div>
                   ) : (
                     <div className="space-y-4">
-                      <div className="h-64 flex items-end justify-between gap-2 md:gap-3 pt-10 pb-2 px-2 border-b">
+                      <div className="h-72 flex items-end justify-between gap-1.5 md:gap-3 pt-12 pb-2 px-2 border-b">
                         {timeData.map((item: any, idx: number) => {
                           const amt = item.total_amount || 0;
-                          const heightPct = maxTimeAmount ? Math.max(Math.round((amt / maxTimeAmount) * 100), 4) : 4;
+                          const heightPct = maxTimeAmount ? Math.max(Math.round((amt / maxTimeAmount) * 70), amt > 0 ? 6 : 2) : 2;
                           const label = item.month_name || item.label || item.day;
+                          const txCount = typeof item.transaction_count === "number"
+                            ? item.transaction_count
+                            : (selectedMonth !== "all"
+                                ? (reportData?.payments || []).filter((p: any) => {
+                                    const d = p.payment_date ? new Date(p.payment_date) : null;
+                                    return d && d.getDate() === item.day;
+                                  }).length
+                                : (reportData?.payments || []).filter((p: any) => {
+                                    const d = p.payment_date ? new Date(p.payment_date) : null;
+                                    return d && d.getMonth() + 1 === item.month;
+                                  }).length
+                              );
 
                           return (
                             <div
@@ -502,24 +522,65 @@ export default function PaymentReportPage() {
                               className="flex-1 flex flex-col items-center h-full justify-end group relative"
                             >
                               {/* Hover Tooltip */}
-                              <div className="absolute -top-10 opacity-0 group-hover:opacity-100 transition-opacity bg-popover text-popover-foreground text-xs font-semibold px-2 py-1 rounded shadow-md border pointer-events-none whitespace-nowrap z-10">
-                                {label}: {formatCurrency(amt)}
+                              <div className="absolute -top-16 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 group-hover:-translate-y-1 transition-all duration-200 bg-popover text-popover-foreground text-xs p-2.5 rounded-lg shadow-xl border pointer-events-none whitespace-nowrap z-30 flex flex-col items-center gap-0.5 min-w-[120px]">
+                                <span className="font-bold text-xs text-foreground">
+                                  {item.month_name
+                                    ? `${item.month_name} ${selectedYear === "all" ? "" : selectedYear}`
+                                    : (item.label || `Day ${item.day}`)}
+                                </span>
+                                <span className="font-extrabold text-primary text-sm">
+                                  {formatCurrency(amt)}
+                                </span>
+                                <span className="text-[11px] text-muted-foreground font-medium flex items-center gap-1 mt-0.5">
+                                  <span>🧾</span>
+                                  <span className="font-semibold text-foreground">{txCount}</span> {txCount === 1 ? "transaction" : "transactions"}
+                                </span>
+                                {/* Tooltip arrow */}
+                                <div className="w-2 h-2 bg-popover border-r border-b border-border rotate-45 absolute -bottom-1 left-1/2 -translate-x-1/2" />
+                              </div>
+
+                              {/* Sum Amount on top of the bar */}
+                              <div className="mb-1.5 text-center select-none w-full flex justify-center">
+                                {amt > 0 ? (
+                                  <span className="text-[10px] md:text-xs font-bold text-primary bg-primary/10 px-1.5 py-0.5 rounded shadow-xs transition-all duration-200 group-hover:scale-105">
+                                    <span className="hidden md:inline">{formatCurrency(amt)}</span>
+                                    <span className="inline md:hidden">{formatCompactCurrency(amt)}</span>
+                                  </span>
+                                ) : (
+                                  <span className="text-[9px] md:text-[10px] text-muted-foreground/40 font-medium">
+                                    {selectedMonth !== "all" ? "" : "₹0"}
+                                  </span>
+                                )}
                               </div>
 
                               {/* Bar */}
                               <div
-                                className={`w-full rounded-t transition-all duration-300 ${
+                                className={`w-full rounded-t transition-all duration-300 shadow-xs ${
                                   amt > 0
                                     ? "bg-gradient-to-t from-primary/80 to-primary group-hover:from-primary group-hover:to-emerald-500"
-                                    : "bg-muted/40"
+                                    : "bg-muted/40 group-hover:bg-muted/60"
                                 }`}
                                 style={{ height: `${heightPct}%` }}
                               />
 
-                              {/* Bar label */}
-                              <span className="text-[10px] md:text-xs text-muted-foreground font-medium mt-2 truncate w-full text-center">
-                                {label}
-                              </span>
+                              {/* X-axis: Label and Transaction Count */}
+                              <div className="flex flex-col items-center mt-2 w-full text-center">
+                                <span className="text-[10px] md:text-xs font-semibold text-foreground truncate w-full">
+                                  {label}
+                                </span>
+                                <span
+                                  className={`text-[9px] md:text-[11px] truncate w-full mt-0.5 ${
+                                    txCount > 0 ? "text-primary font-bold" : "text-muted-foreground/50 font-medium"
+                                  }`}
+                                >
+                                  <span className="hidden sm:inline">
+                                    {txCount} {txCount === 1 ? "txn" : "txns"}
+                                  </span>
+                                  <span className="inline sm:hidden">
+                                    {txCount}
+                                  </span>
+                                </span>
+                              </div>
                             </div>
                           );
                         })}
