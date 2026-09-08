@@ -32,7 +32,7 @@ export default function VoucherPdfPage({ params }: { params: Promise<{ id: strin
     return `(${nights} Nights / ${nights + 1} Days)`;
   };
 
-  const agencyName = me?.agency_name?.trim() || "TripPilot Travel";
+  const agencyName = me?.agency_name?.trim() || "Plannatrip";
   const agencyLogoSrc = resolveAssetUrl(me?.logo_url);
   const agencyAddress = me?.agency_office_address;
   const agencyPhone = me?.advisor_phone;
@@ -84,15 +84,17 @@ export default function VoucherPdfPage({ params }: { params: Promise<{ id: strin
                 <img
                   src={agencyLogoSrc}
                   alt={agencyName}
-                  style={{ height: 44, maxWidth: 160, objectFit: "contain", background: "white", borderRadius: 6, padding: 3 }}
+                  style={{ height: 48, maxWidth: 200, objectFit: "contain", background: "white", borderRadius: 6, padding: "4px 8px" }}
                   onError={() => setImgError(true)}
                 />
               ) : (
-                <div style={{ width: 40, height: 40, background: BRAND, color: "white", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 900, fontSize: 24 }}>
-                  {agencyName.charAt(0).toUpperCase()}
-                </div>
+                <>
+                  <div style={{ width: 40, height: 40, background: BRAND, color: "white", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 900, fontSize: 24 }}>
+                    {agencyName.charAt(0).toUpperCase()}
+                  </div>
+                  <div style={{ color: "white", fontWeight: 800, fontSize: 22, letterSpacing: "1px" }}>{agencyName}</div>
+                </>
               )}
-              <div style={{ color: "white", fontWeight: 800, fontSize: 22, letterSpacing: "1px" }}>{agencyName}</div>
             </div>
             <div style={{ textAlign: "right", color: "white" }}>
               <div style={{ fontWeight: 800, fontSize: 24, textTransform: "uppercase", letterSpacing: "2px", opacity: 0.9 }}>
