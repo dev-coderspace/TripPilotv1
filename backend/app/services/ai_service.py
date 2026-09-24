@@ -9,18 +9,25 @@ import re
 import httpx
 from app.core.config import settings
 
-GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta/models"
-GEMINI_MODELS = ["gemini-1.5-flash", "gemini-2.0-flash"]
+GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta"
+GEMINI_MODELS = [
+    "gemini-1.5-flash-latest",
+    "gemini-1.5-flash",
+    "gemini-1.5-pro-latest",
+    "gemini-1.5-pro",
+    "gemini-2.0-flash-exp",
+]
 
 
 async def _call_gemini(prompt: str, temperature: float = 0.3) -> str:
     """Raw Gemini API call with model fallback, retry mechanism, and precise error reporting."""
-    if not settings.GEMINI_API_KEY or not settings.GEMINI_API_KEY.strip():
-        raise RuntimeError("GEMINI_API_KEY is not set or empty in the backend environment variables (.env file).")
+    api_key = (settings.GEMINI_API_KEY or "").strip()
+    if not api_key:
+        raise RuntimeError("GEMINI_API_KEY is not set or empty in backend environment variables (.env file).")
 
     headers = {
         "Content-Type": "application/json",
-        "X-goog-api-key": settings.GEMINI_API_KEY.strip(),
+        "X-goog-api-key": api_key,
     }
     body = {
         "contents": [{"parts": [{"text": prompt}]}],
@@ -30,25 +37,14 @@ async def _call_gemini(prompt: str, temperature: float = 0.3) -> str:
         },
     }
 
-    last_err = None
+    errors = []
     for model in GEMINI_MODELS:
-        url = f"{GEMINI_BASE}/{model}:generateContent"
-        for attempt in range(2):
-            try:
-                async with httpx.AsyncClient(timeout=20) as client:
-                    resp = await client.post(url, headers=headers, json=body)
+        url = f"{GEMINI_BASE}/models/{model}:generateContent?key={api_key}"
+        try:
+            async with httpx.AsyncClient(timeout=20) as client:
+                resp = await client.post(url, headers=headers, json=body)
 
-                if resp.status_code == 429:
-                    raise RuntimeError(f"Gemini API Quota / Rate Limit Exceeded (HTTP 429): {resp.text[:300]}")
-                if resp.status_code == 400 or resp.status_code == 403:
-                    raise RuntimeError(f"Gemini API Key or Request Error ({resp.status_code}): {resp.text[:300]}")
-                if resp.status_code >= 500:
-                    raise httpx.HTTPError(f"Gemini server error {resp.status_code}: {resp.text[:300]}")
-                if resp.status_code >= 400:
-                    if resp.status_code == 404:
-                        break  # model not found, try next model
-                    raise RuntimeError(f"Gemini API error {resp.status_code}: {resp.text[:400]}")
-
+            if resp.status_code == 200:
                 data = resp.json()
                 candidates = data.get("candidates") or []
                 if not candidates:
@@ -60,18 +56,19 @@ async def _call_gemini(prompt: str, temperature: float = 0.3) -> str:
                 if not texts:
                     raise RuntimeError(f"Gemini returned no text (finishReason={cand.get('finishReason')})")
                 return "".join(texts)
-            except httpx.HTTPError as e:
-                last_err = e
-                await asyncio.sleep(1)
-            except RuntimeError as e:
-                last_err = e
-                if any(err_kw in str(e) for err_kw in ["Quota", "429", "400", "403", "not set"]):
-                    raise e
-                break
 
-    if last_err:
-        raise last_err
-    raise RuntimeError("Failed to call Gemini API across available models.")
+            err_detail = f"HTTP {resp.status_code}: {resp.text[:300]}"
+            errors.append(f"[{model}] {err_detail}")
+
+            if resp.status_code == 429:
+                raise RuntimeError(f"Gemini API Quota Exceeded (HTTP 429): {resp.text[:300]}")
+            if resp.status_code in (400, 403):
+                raise RuntimeError(f"Gemini API Key Error ({resp.status_code}): {resp.text[:300]}")
+        except Exception as e:
+            if any(err_kw in str(e) for err_kw in ["Quota", "429", "400", "403", "not set"]):
+                raise e
+
+    raise RuntimeError(f"Gemini API call failed across all models. Details: {'; '.join(errors)}")
 
 
 def repair_truncated_json(s: str) -> str:
