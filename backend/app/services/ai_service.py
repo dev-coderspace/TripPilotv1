@@ -41,15 +41,48 @@ async def _get_supported_models(api_key: str) -> list[str]:
         _AVAILABLE_MODELS_CACHE = discovered
         return discovered
 
-    return ["models/gemini-1.5-flash", "models/gemini-1.5-pro", "models/gemini-2.0-flash-exp"]
+    return ["models/gemini-3.8-flash", "models/gemini-2.5-flash", "models/gemini-1.5-flash", "models/gemini-1.5-pro", "models/gemini-2.0-flash-exp"]
 
 
 async def _call_gemini(prompt: str, temperature: float = 0.3) -> str:
-    """Raw Gemini API call with dynamic model discovery and precise error reporting."""
+    """Gemini API call using official google.generativeai SDK with REST HTTP fallback."""
     api_key = (settings.GEMINI_API_KEY or "").strip()
     if not api_key:
         raise RuntimeError("GEMINI_API_KEY is not set or empty in backend environment variables (.env file).")
 
+    # 1. Try official google.generativeai SDK first
+    try:
+        import google.generativeai as genai
+
+        genai.configure(api_key=api_key)
+        sdk_models = ["gemini-3.8-flash", "gemini-2.5-flash", "gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.0-flash", "gemini-1.0-pro"]
+        sdk_errors = []
+
+        for model_name in sdk_models:
+            try:
+                model = genai.GenerativeModel(
+                    model_name=model_name,
+                    generation_config=genai.GenerationConfig(
+                        temperature=temperature,
+                        max_output_tokens=8192,
+                    ),
+                )
+                res = model.generate_content(prompt)
+                if res and res.text:
+                    return res.text
+            except Exception as e:
+                err_str = str(e)
+                if any(k in err_str.lower() for k in ["quota", "429", "resource_exhausted"]):
+                    raise RuntimeError(f"Gemini API Quota Exceeded (HTTP 429): {err_str}")
+                if any(k in err_str.lower() for k in ["invalid", "key", "400", "403", "unauthorized"]):
+                    raise RuntimeError(f"Gemini API Key Error: {err_str}")
+                sdk_errors.append(f"[{model_name}] {err_str}")
+    except RuntimeError:
+        raise
+    except Exception as sdk_err:
+        print(f"SDK call failed, trying REST fallback: {sdk_err}")
+
+    # 2. REST HTTP Fallback
     headers = {
         "Content-Type": "application/json",
         "X-goog-api-key": api_key,
@@ -66,7 +99,6 @@ async def _call_gemini(prompt: str, temperature: float = 0.3) -> str:
     errors = []
 
     for model_path in target_models:
-        # Handle whether model_path starts with 'models/' or not
         full_model = model_path if model_path.startswith("models/") else f"models/{model_path}"
         url = f"{GEMINI_BASE}/{full_model}:generateContent?key={api_key}"
         try:
