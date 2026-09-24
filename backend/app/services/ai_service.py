@@ -10,17 +10,42 @@ import httpx
 from app.core.config import settings
 
 GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta"
-GEMINI_MODELS = [
-    "gemini-1.5-flash-latest",
-    "gemini-1.5-flash",
-    "gemini-1.5-pro-latest",
-    "gemini-1.5-pro",
-    "gemini-2.0-flash-exp",
-]
+_AVAILABLE_MODELS_CACHE: list[str] = []
+
+
+async def _get_supported_models(api_key: str) -> list[str]:
+    """Query Google AI's ListModels API to get exact supported generateContent models for this key."""
+    global _AVAILABLE_MODELS_CACHE
+    if _AVAILABLE_MODELS_CACHE:
+        return _AVAILABLE_MODELS_CACHE
+
+    discovered = []
+    for base in ["https://generativelanguage.googleapis.com/v1beta", "https://generativelanguage.googleapis.com/v1"]:
+        try:
+            async with httpx.AsyncClient(timeout=10) as client:
+                res = await client.get(f"{base}/models?key={api_key}")
+                if res.status_code == 200:
+                    models = res.json().get("models") or []
+                    for m in models:
+                        name = m.get("name", "")
+                        methods = m.get("supportedGenerationMethods") or []
+                        if "generateContent" in methods and ("flash" in name or "pro" in name or "gemini" in name):
+                            if name not in discovered:
+                                discovered.append(name)
+        except Exception:
+            pass
+
+    if discovered:
+        # Prioritize flash models, then pro models
+        discovered.sort(key=lambda x: (0 if "flash" in x else 1, x))
+        _AVAILABLE_MODELS_CACHE = discovered
+        return discovered
+
+    return ["models/gemini-1.5-flash", "models/gemini-1.5-pro", "models/gemini-2.0-flash-exp"]
 
 
 async def _call_gemini(prompt: str, temperature: float = 0.3) -> str:
-    """Raw Gemini API call with model fallback, retry mechanism, and precise error reporting."""
+    """Raw Gemini API call with dynamic model discovery and precise error reporting."""
     api_key = (settings.GEMINI_API_KEY or "").strip()
     if not api_key:
         raise RuntimeError("GEMINI_API_KEY is not set or empty in backend environment variables (.env file).")
@@ -37,11 +62,15 @@ async def _call_gemini(prompt: str, temperature: float = 0.3) -> str:
         },
     }
 
+    target_models = await _get_supported_models(api_key)
     errors = []
-    for model in GEMINI_MODELS:
-        url = f"{GEMINI_BASE}/models/{model}:generateContent?key={api_key}"
+
+    for model_path in target_models:
+        # Handle whether model_path starts with 'models/' or not
+        full_model = model_path if model_path.startswith("models/") else f"models/{model_path}"
+        url = f"{GEMINI_BASE}/{full_model}:generateContent?key={api_key}"
         try:
-            async with httpx.AsyncClient(timeout=20) as client:
+            async with httpx.AsyncClient(timeout=25) as client:
                 resp = await client.post(url, headers=headers, json=body)
 
             if resp.status_code == 200:
@@ -58,7 +87,7 @@ async def _call_gemini(prompt: str, temperature: float = 0.3) -> str:
                 return "".join(texts)
 
             err_detail = f"HTTP {resp.status_code}: {resp.text[:300]}"
-            errors.append(f"[{model}] {err_detail}")
+            errors.append(f"[{full_model}] {err_detail}")
 
             if resp.status_code == 429:
                 raise RuntimeError(f"Gemini API Quota Exceeded (HTTP 429): {resp.text[:300]}")
@@ -68,7 +97,7 @@ async def _call_gemini(prompt: str, temperature: float = 0.3) -> str:
             if any(err_kw in str(e) for err_kw in ["Quota", "429", "400", "403", "not set"]):
                 raise e
 
-    raise RuntimeError(f"Gemini API call failed across all models. Details: {'; '.join(errors)}")
+    raise RuntimeError(f"Gemini API call failed across models. Tried: {target_models}. Errors: {'; '.join(errors)}")
 
 
 def repair_truncated_json(s: str) -> str:
