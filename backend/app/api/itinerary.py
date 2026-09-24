@@ -269,9 +269,10 @@ async def generate_itinerary(
     # ai_generate returns an empty fallback ({"days": []}) when the Gemini call
     # fails — don't persist a blank itinerary; surface a clear error instead.
     if not data.get("days"):
+        err_reason = data.get("error") or "Unknown error"
         raise HTTPException(
             status_code=502,
-            detail="AI itinerary generation failed. Please retry — if it persists, check the GEMINI_API_KEY and Gemini quota.",
+            detail=f"AI itinerary generation failed: {err_reason}. Please check your GEMINI_API_KEY and Gemini quota.",
         )
 
     itin = Itinerary(

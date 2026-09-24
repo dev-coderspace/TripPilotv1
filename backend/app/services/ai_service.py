@@ -10,60 +10,68 @@ import httpx
 from app.core.config import settings
 
 GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta/models"
-GEMINI_MODEL = "gemini-2.5-flash"   # Using 2.5 flash as it might be more stable than flash-latest
-
-
+GEMINI_MODELS = ["gemini-1.5-flash", "gemini-2.0-flash"]
 
 
 async def _call_gemini(prompt: str, temperature: float = 0.3) -> str:
-    """Raw Gemini API call with 3x retry mechanism and exponential backoff."""
-    import asyncio
-    url = f"{GEMINI_BASE}/{GEMINI_MODEL}:generateContent"
+    """Raw Gemini API call with model fallback, retry mechanism, and precise error reporting."""
+    if not settings.GEMINI_API_KEY or not settings.GEMINI_API_KEY.strip():
+        raise RuntimeError("GEMINI_API_KEY is not set or empty in the backend environment variables (.env file).")
+
     headers = {
         "Content-Type": "application/json",
-        "X-goog-api-key": settings.GEMINI_API_KEY,
+        "X-goog-api-key": settings.GEMINI_API_KEY.strip(),
     }
     body = {
         "contents": [{"parts": [{"text": prompt}]}],
         "generationConfig": {
             "temperature": temperature,
             "maxOutputTokens": 8192,
-            # gemini-2.5-* are "thinking" models; without this they can burn the
-            # whole output budget on reasoning and return no text (finishReason
-            # MAX_TOKENS). thinkingBudget=0 disables thinking so all tokens go to
-            # the actual JSON answer.
-            "thinkingConfig": {"thinkingBudget": 0},
         },
     }
 
     last_err = None
-    for attempt in range(3):
-        try:
-            async with httpx.AsyncClient(timeout=15) as client:
-                resp = await client.post(url, headers=headers, json=body)
+    for model in GEMINI_MODELS:
+        url = f"{GEMINI_BASE}/{model}:generateContent"
+        for attempt in range(2):
+            try:
+                async with httpx.AsyncClient(timeout=20) as client:
+                    resp = await client.post(url, headers=headers, json=body)
 
-            # 5xx → transient, retry. 4xx → surface the API error body (no retry).
-            if resp.status_code >= 500:
-                raise httpx.HTTPError(f"Gemini server error {resp.status_code}: {resp.text[:300]}")
-            if resp.status_code >= 400:
-                raise RuntimeError(f"Gemini API error {resp.status_code}: {resp.text[:500]}")
+                if resp.status_code == 429:
+                    raise RuntimeError(f"Gemini API Quota / Rate Limit Exceeded (HTTP 429): {resp.text[:300]}")
+                if resp.status_code == 400 or resp.status_code == 403:
+                    raise RuntimeError(f"Gemini API Key or Request Error ({resp.status_code}): {resp.text[:300]}")
+                if resp.status_code >= 500:
+                    raise httpx.HTTPError(f"Gemini server error {resp.status_code}: {resp.text[:300]}")
+                if resp.status_code >= 400:
+                    if resp.status_code == 404:
+                        break  # model not found, try next model
+                    raise RuntimeError(f"Gemini API error {resp.status_code}: {resp.text[:400]}")
 
-            data = resp.json()
-            candidates = data.get("candidates") or []
-            if not candidates:
-                raise RuntimeError(f"Gemini returned no candidates (promptFeedback={data.get('promptFeedback')})")
+                data = resp.json()
+                candidates = data.get("candidates") or []
+                if not candidates:
+                    raise RuntimeError(f"Gemini returned no candidates (promptFeedback={data.get('promptFeedback')})")
 
-            cand = candidates[0]
-            parts = (cand.get("content") or {}).get("parts") or []
-            texts = [p["text"] for p in parts if isinstance(p, dict) and "text" in p]
-            if not texts:
-                raise RuntimeError(f"Gemini returned no text (finishReason={cand.get('finishReason')})")
-            return "".join(texts)
-        except httpx.HTTPError as e:
-            last_err = e
-            print(f"Gemini API attempt {attempt + 1} failed: {e}. Retrying in {2 ** attempt}s...")
-            await asyncio.sleep(2 ** attempt)
-    raise last_err
+                cand = candidates[0]
+                parts = (cand.get("content") or {}).get("parts") or []
+                texts = [p["text"] for p in parts if isinstance(p, dict) and "text" in p]
+                if not texts:
+                    raise RuntimeError(f"Gemini returned no text (finishReason={cand.get('finishReason')})")
+                return "".join(texts)
+            except httpx.HTTPError as e:
+                last_err = e
+                await asyncio.sleep(1)
+            except RuntimeError as e:
+                last_err = e
+                if any(err_kw in str(e) for err_kw in ["Quota", "429", "400", "403", "not set"]):
+                    raise e
+                break
+
+    if last_err:
+        raise last_err
+    raise RuntimeError("Failed to call Gemini API across available models.")
 
 
 def repair_truncated_json(s: str) -> str:
@@ -570,7 +578,7 @@ Respond ONLY with a JSON object. No explanation."""
         import traceback
         traceback.print_exc()
         print("GEMINI ITINERARY GENERATION FAILED:", str(e))
-        return {"title": "New Itinerary", "days": [], "total_days": 0, "total_nights": 0}
+        return {"title": "New Itinerary", "days": [], "total_days": 0, "total_nights": 0, "error": str(e)}
 
 
 # ─── Hotel Voucher Parsing ────────────────────────────────────────────────────
