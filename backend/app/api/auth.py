@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from pydantic import BaseModel, EmailStr
 
 from app.core.database import get_db
-from app.core.security import verify_password, hash_password, create_access_token, get_current_user
+from app.core.security import verify_password, hash_password, create_access_token, get_current_user, require_permission
 from app.core.config import settings
 from app.models.user import User
 
