@@ -41,7 +41,7 @@ async def _get_supported_models(api_key: str) -> list[str]:
         _AVAILABLE_MODELS_CACHE = discovered
         return discovered
 
-    return ["models/gemini-3.8-flash", "models/gemini-2.5-flash", "models/gemini-1.5-flash", "models/gemini-1.5-pro", "models/gemini-2.0-flash-exp"]
+    return ["models/gemini-1.5-flash", "models/gemini-3.5-flash-lite", "models/gemini-2.5-flash-lite", "models/gemini-2.5-flash", "models/gemini-1.5-pro"]
 
 
 async def _call_gemini(prompt: str, temperature: float = 0.3) -> str:
@@ -55,7 +55,7 @@ async def _call_gemini(prompt: str, temperature: float = 0.3) -> str:
         import google.generativeai as genai
 
         genai.configure(api_key=api_key)
-        sdk_models = ["gemini-3.8-flash", "gemini-2.5-flash", "gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.0-flash", "gemini-1.0-pro"]
+        sdk_models = ["gemini-1.5-flash", "gemini-3.5-flash-lite", "gemini-2.5-flash-lite", "gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-pro"]
         sdk_errors = []
 
         for model_name in sdk_models:
@@ -72,11 +72,11 @@ async def _call_gemini(prompt: str, temperature: float = 0.3) -> str:
                     return res.text
             except Exception as e:
                 err_str = str(e)
-                if any(k in err_str.lower() for k in ["quota", "429", "resource_exhausted"]):
-                    raise RuntimeError(f"Gemini API Quota Exceeded (HTTP 429): {err_str}")
                 if any(k in err_str.lower() for k in ["invalid", "key", "400", "403", "unauthorized"]):
                     raise RuntimeError(f"Gemini API Key Error: {err_str}")
-                sdk_errors.append(f"[{model_name}] {err_str}")
+                # If per-model 429 rate limit / quota exceeded, append error and fallback to next model
+                sdk_errors.append(f"[{model_name}] {err_str[:200]}")
+                continue
     except RuntimeError:
         raise
     except Exception as sdk_err:
