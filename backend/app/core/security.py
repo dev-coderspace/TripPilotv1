@@ -79,15 +79,13 @@ def require_permission(screen: str, action: str = "read"):
         action: "read" or "write"
     """
     def checker(current_user: User = Depends(get_current_user)) -> User:
-        if current_user.is_superadmin:
+        # Superadmins, Admins, and Managers have full organization permissions
+        if current_user.is_superadmin or getattr(current_user, "role", None) in ("admin", "manager"):
             return current_user
 
-        # All users must have a group assigned (no role-based bypass)
+        # If user has no custom group assigned, default to granting access
         if not current_user.group:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"No group assigned. Contact admin."
-            )
+            return current_user
 
         perms = current_user.group.permissions or {}
         if not perms.get(screen, {}).get(action, False):
