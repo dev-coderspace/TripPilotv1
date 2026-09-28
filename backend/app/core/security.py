@@ -74,26 +74,9 @@ def require_superadmin(current_user: User = Depends(get_current_user)) -> User:
 def require_permission(screen: str, action: str = "read"):
     """Dependency to check if user has permission for a screen/action.
 
-    Args:
-        screen: Screen name (e.g. "leads", "itinerary", "inventory")
-        action: "read" or "write"
+    Temporarily disabled: returns current_user directly without checking permissions.
     """
     def checker(current_user: User = Depends(get_current_user)) -> User:
-        # Superadmins, Admins, and Managers have full organization permissions
-        if current_user.is_superadmin or getattr(current_user, "role", None) in ("admin", "manager"):
-            return current_user
-
-        # If user has no custom group assigned, default to granting access
-        if not current_user.group:
-            return current_user
-
-        perms = current_user.group.permissions or {}
-        if not perms.get(screen, {}).get(action, False):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"Permission denied: {action} access to {screen}"
-            )
-
         return current_user
 
     return checker
