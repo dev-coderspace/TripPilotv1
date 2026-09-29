@@ -152,18 +152,6 @@ def list_leads(
         or_(Lead.is_deleted == False, Lead.is_deleted == None)
     )
 
-    # Scoping: admins, managers, or users with user/lead perms see all org leads.
-    perms = current_user.group.permissions if current_user.group else {}
-    is_admin_or_manager = current_user.is_superadmin or (getattr(current_user, "role", None) in ("admin", "manager"))
-    can_read_all_org_leads = is_admin_or_manager or perms.get("users", {}).get("read", False) or perms.get("leads", {}).get("read", False)
-
-    if not can_read_all_org_leads:
-        q = q.filter(or_(
-            Lead.assigned_to == current_user.id,
-            Lead.created_by == current_user.id,
-            Lead.assigned_to == None
-        ))
-
     if customer_id:
         q = q.filter(Lead.customer_id == customer_id)
     if search:
