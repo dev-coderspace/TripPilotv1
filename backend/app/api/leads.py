@@ -72,8 +72,8 @@ class LeadUpdate(BaseModel):
 
 class LeadCustomerOut(BaseModel):
     id: int
-    name: str
-    phone: str
+    name: Optional[str] = "Unknown"
+    phone: Optional[str] = "—"
     email: Optional[str] = None
     whatsapp_number: Optional[str] = None
 
@@ -93,24 +93,24 @@ class B2BPartnerBrief(BaseModel):
 class LeadOut(BaseModel):
     id: int
     customer_id: int
-    source: str
-    stage: str
-    destination: Optional[str]
-    trip_type: Optional[str]
-    travel_date: Optional[datetime]
+    source: Optional[str] = "manual"
+    stage: Optional[str] = "fresh"
+    destination: Optional[str] = None
+    trip_type: Optional[str] = None
+    travel_date: Optional[datetime] = None
     num_nights: Optional[int] = None
     num_days: Optional[int] = None
-    num_adults: Optional[int]
-    num_children: Optional[int]
-    num_infants: Optional[int]
+    num_adults: Optional[int] = None
+    num_children: Optional[int] = None
+    num_infants: Optional[int] = None
     adults: Optional[int] = None
     kids: Optional[int] = None
     infants: Optional[int] = None
-    budget: Optional[str]
-    notes: Optional[str]
-    assigned_to: Optional[int]
+    budget: Optional[str] = None
+    notes: Optional[str] = None
+    assigned_to: Optional[int] = None
     b2b_partner_id: Optional[int] = None
-    created_at: datetime
+    created_at: Optional[datetime] = None
     customer: Optional[LeadCustomerOut] = None
     b2b_partner: Optional[B2BPartnerBrief] = None
 
@@ -137,8 +137,8 @@ def list_leads(
     page: int = Query(1, ge=1),
     per_page: int = Query(20, ge=1, le=100),
     search: Optional[str] = None,
-    source: Optional[LeadSource] = None,
-    stage: Optional[LeadStage] = None,
+    source: Optional[str] = None,
+    stage: Optional[str] = None,
     assigned_to: Optional[int] = None,
     unassigned: bool = False,
     date_from: Optional[date] = None,
@@ -149,7 +149,7 @@ def list_leads(
     current_user: User = Depends(require_permission("leads", "read")),
 ):
     q = db.query(Lead).filter(
-        or_(Lead.is_deleted == False, Lead.is_deleted == None)
+        or_(Lead.is_deleted == False, Lead.is_deleted == 0, Lead.is_deleted.is_(None))
     )
 
     if org_id:

@@ -165,35 +165,39 @@ def get_notifications(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    now = datetime.now()
-    today_end = datetime(now.year, now.month, now.day, 23, 59, 59)
+    try:
+        now = datetime.now()
+        today_end = datetime(now.year, now.month, now.day, 23, 59, 59)
 
-    rows = (
-        db.query(Followup, Lead, Customer)
-        .join(Lead, Followup.lead_id == Lead.id)
-        .join(Customer, Lead.customer_id == Customer.id)
-        .filter(Followup.org_id == current_user.org_id)
-        .filter(Followup.status == FollowupStatus.pending)
-        .filter(Followup.scheduled_date <= today_end)
-        .order_by(Followup.scheduled_date.asc())
-        .limit(30)
-        .all()
-    )
+        q = (
+            db.query(Followup, Lead, Customer)
+            .join(Lead, Followup.lead_id == Lead.id)
+            .join(Customer, Lead.customer_id == Customer.id)
+            .filter(or_(Followup.status == FollowupStatus.pending, Followup.status == "pending"))
+            .filter(Followup.scheduled_date <= today_end)
+        )
+        if current_user.org_id:
+            q = q.filter(Followup.org_id == current_user.org_id)
 
-    result = []
-    for followup, lead, customer in rows:
-        is_overdue = followup.scheduled_date < datetime(now.year, now.month, now.day, 0, 0, 0)
-        result.append({
-            "id": followup.id,
-            "lead_id": lead.id,
-            "customer_name": customer.name,
-            "destination": lead.destination,
-            "notes": followup.notes,
-            "scheduled_date": followup.scheduled_date.isoformat(),
-            "kind": "overdue" if is_overdue else "today",
-        })
+        rows = q.order_by(Followup.scheduled_date.asc()).limit(30).all()
 
-    return {"items": result, "total": len(result)}
+        result = []
+        for followup, lead, customer in rows:
+            is_overdue = followup.scheduled_date < datetime(now.year, now.month, now.day, 0, 0, 0) if followup.scheduled_date else False
+            result.append({
+                "id": followup.id,
+                "lead_id": lead.id,
+                "customer_name": customer.name if customer else "Unknown",
+                "destination": lead.destination,
+                "notes": followup.notes,
+                "scheduled_date": followup.scheduled_date.isoformat() if followup.scheduled_date else "",
+                "kind": "overdue" if is_overdue else "today",
+            })
+
+        return {"items": result, "total": len(result)}
+    except Exception as e:
+        print(f"[notifications] Error: {e}")
+        return {"items": [], "total": 0}
 
 
 # Delete follow-up

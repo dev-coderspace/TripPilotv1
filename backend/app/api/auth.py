@@ -72,15 +72,15 @@ def _user_with_permissions(user: User, db: Session = None) -> dict:
         first_user = db.query(User).filter(User.org_id == user.org_id).order_by(User.id.asc()).first()
         is_org_owner = first_user and first_user.id == user.id
 
-    if not permissions and (is_admin_role or is_org_owner):
+    if not permissions:
         permissions = {
             "leads": {"read": True, "write": True},
             "itinerary": {"read": True, "write": True},
             "vouchers": {"read": True, "write": True},
             "inventory": {"read": True, "write": True},
             "dashboard": {"read": True, "write": True},
-            "settings": {"read": True, "write": True},
-            "users": {"read": True, "write": True},
+            "settings": {"read": True, "write": is_admin_role or is_org_owner},
+            "users": {"read": True, "write": is_admin_role or is_org_owner},
         }
 
     user_dict = {

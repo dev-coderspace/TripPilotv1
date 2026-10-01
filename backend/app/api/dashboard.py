@@ -39,23 +39,23 @@ def dashboard_summary(
 
 @router.get("/leads-by-source")
 def leads_by_source(db: Session = Depends(get_db), current_user: User = Depends(require_permission("dashboard", "read"))):
-    rows = db.query(Lead.source, func.count(Lead.id)).filter(Lead.org_id == current_user.org_id, or_(Lead.is_deleted == False, Lead.is_deleted == None)).group_by(Lead.source).all()
-    return [{"source": r[0].value if r[0] else "unknown", "count": r[1]} for r in rows]
+    rows = db.query(Lead.source, func.count(Lead.id)).filter(Lead.org_id == current_user.org_id, or_(Lead.is_deleted == False, Lead.is_deleted == 0, Lead.is_deleted.is_(None))).group_by(Lead.source).all()
+    return [{"source": (r[0].value if hasattr(r[0], "value") else str(r[0])) if r[0] else "unknown", "count": r[1]} for r in rows]
 
 
 @router.get("/leads-by-stage")
 def leads_by_stage(db: Session = Depends(get_db), current_user: User = Depends(require_permission("dashboard", "read"))):
-    rows = db.query(Lead.stage, func.count(Lead.id)).filter(Lead.org_id == current_user.org_id, or_(Lead.is_deleted == False, Lead.is_deleted == None)).group_by(Lead.stage).all()
-    return [{"stage": r[0].value if r[0] else "unknown", "count": r[1]} for r in rows]
+    rows = db.query(Lead.stage, func.count(Lead.id)).filter(Lead.org_id == current_user.org_id, or_(Lead.is_deleted == False, Lead.is_deleted == 0, Lead.is_deleted.is_(None))).group_by(Lead.stage).all()
+    return [{"stage": (r[0].value if hasattr(r[0], "value") else str(r[0])) if r[0] else "unknown", "count": r[1]} for r in rows]
 
 
 @router.get("/leaderboard")
 def team_leaderboard(db: Session = Depends(get_db), current_user: User = Depends(require_permission("dashboard", "read"))):
-    not_deleted = or_(Lead.is_deleted == False, Lead.is_deleted == None)
+    not_deleted = or_(Lead.is_deleted == False, Lead.is_deleted == 0, Lead.is_deleted.is_(None))
     rows = db.query(
         User.name,
         func.count(Lead.id).label("leads"),
-        func.sum(case((and_(Lead.stage == LeadStage.won, not_deleted), 1), else_=0)).label("won"),
+        func.sum(case((and_(or_(Lead.stage == LeadStage.won, Lead.stage == "won"), not_deleted), 1), else_=0)).label("won"),
     ).filter(User.org_id == current_user.org_id).join(Lead, and_(Lead.assigned_to == User.id, not_deleted), isouter=True).group_by(User.id, User.name).all()
     return [{"agent": r[0], "leads": r[1], "won": r[2]} for r in rows]
 
@@ -68,7 +68,7 @@ async def get_ai_insights(
     try:
         leads = (
             db.query(Lead)
-            .filter(Lead.org_id == current_user.org_id, or_(Lead.is_deleted == False, Lead.is_deleted == None))
+            .filter(Lead.org_id == current_user.org_id, or_(Lead.is_deleted == False, Lead.is_deleted == 0, Lead.is_deleted.is_(None)))
             .order_by(Lead.created_at.desc())
             .limit(30)
             .all()
@@ -78,10 +78,10 @@ async def get_ai_insights(
         for l in leads:
             leads_list.append({
                 "id": l.id,
-                "name": l.name,
-                "phone": l.phone,
-                "source": l.source.value if l.source else "manual",
-                "stage": l.stage.value if l.stage else "fresh",
+                "name": l.customer.name if l.customer else "Unknown",
+                "phone": l.customer.phone if l.customer else "",
+                "source": l.source.value if hasattr(l.source, "value") else (l.source or "manual"),
+                "stage": l.stage.value if hasattr(l.stage, "value") else (l.stage or "fresh"),
                 "destination": l.destination,
                 "trip_type": l.trip_type,
                 "budget": l.budget,

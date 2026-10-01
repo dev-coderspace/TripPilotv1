@@ -42,9 +42,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const hasPermission = (screen: string, action: "read" | "write"): boolean => {
     if (!user) return false;
-    // Check group-based permissions
-    if (!user.permissions) return false;
-    return user.permissions[screen]?.[action] || false;
+    if (user.role === "admin" || user.role === "superadmin" || (user as any).is_superadmin) return true;
+    // Check group-based permissions if defined
+    if (user.permissions && Object.keys(user.permissions).length > 0) {
+      if (user.permissions[screen] && user.permissions[screen][action] !== undefined) {
+        return Boolean(user.permissions[screen][action]);
+      }
+    }
+    // Default fallback: allow access to leads, dashboard, itineraries, etc.
+    if (screen === "leads" || screen === "dashboard" || screen === "itinerary" || screen === "vouchers" || screen === "inventory") {
+      return true;
+    }
+    return false;
   };
 
   const login = (token: string, userData: User) => {

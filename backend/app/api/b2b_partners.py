@@ -156,7 +156,7 @@ def list_b2b_partners(
             "city": p.city,
             "country": p.country,
             "countries": p.countries or [],
-            "category": p.category.value if p.category else None,
+            "category": p.category.value if hasattr(p.category, "value") else (p.category if p.category else None),
             "commission_pct": p.commission_pct,
             "notes": p.notes,
             "is_active": p.is_active,
