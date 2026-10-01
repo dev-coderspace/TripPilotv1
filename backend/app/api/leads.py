@@ -148,77 +148,82 @@ def list_leads(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permission("leads", "read")),
 ):
-    q = db.query(Lead).filter(
-        or_(Lead.is_deleted == False, Lead.is_deleted == 0, Lead.is_deleted.is_(None))
-    )
+    try:
+        q = db.query(Lead).filter(
+            or_(Lead.is_deleted == False, Lead.is_deleted.is_(None))
+        )
 
-    if org_id:
-        q = q.filter(Lead.org_id == org_id)
-    if customer_id:
-        q = q.filter(Lead.customer_id == customer_id)
-    if search:
-        q = q.join(Customer).filter(or_(
-            Customer.name.ilike(f"%{search}%"),
-            Customer.phone.ilike(f"%{search}%"),
-            Customer.email.ilike(f"%{search}%"),
-        ))
-    if source:
-        q = q.filter(Lead.source == source)
-    if stage:
-        q = q.filter(Lead.stage == stage)
-    if assigned_to:
-        q = q.filter(Lead.assigned_to == assigned_to)
-    if unassigned:
-        q = q.filter(Lead.assigned_to == None)
-    if date_from:
-        q = q.filter(Lead.created_at >= datetime.combine(date_from, datetime.min.time()))
-    if date_to:
-        q = q.filter(Lead.created_at <= datetime.combine(date_to, datetime.max.time()))
+        if org_id:
+            q = q.filter(Lead.org_id == org_id)
+        if customer_id:
+            q = q.filter(Lead.customer_id == customer_id)
+        if search:
+            q = q.join(Customer).filter(or_(
+                Customer.name.ilike(f"%{search}%"),
+                Customer.phone.ilike(f"%{search}%"),
+                Customer.email.ilike(f"%{search}%"),
+            ))
+        if source:
+            q = q.filter(Lead.source == source)
+        if stage:
+            q = q.filter(Lead.stage == stage)
+        if assigned_to:
+            q = q.filter(Lead.assigned_to == assigned_to)
+        if unassigned:
+            q = q.filter(Lead.assigned_to == None)
+        if date_from:
+            q = q.filter(Lead.created_at >= datetime.combine(date_from, datetime.min.time()))
+        if date_to:
+            q = q.filter(Lead.created_at <= datetime.combine(date_to, datetime.max.time()))
 
-    total = q.count()
-    leads = q.order_by(Lead.created_at.desc()).offset((page - 1) * per_page).limit(per_page).all()
+        total = q.count()
+        leads = q.order_by(Lead.created_at.desc()).offset((page - 1) * per_page).limit(per_page).all()
 
-    # Add customer and b2b info to leads
-    result_items = []
-    for lead in leads:
-        lead_dict = {
-            "id": lead.id,
-            "customer_id": lead.customer_id,
-            "source": lead.source.value if hasattr(lead.source, "value") else (lead.source or ""),
-            "stage": lead.stage.value if hasattr(lead.stage, "value") else (lead.stage or ""),
-            "destination": lead.destination,
-            "trip_type": lead.trip_type,
-            "travel_date": lead.travel_date,
-            "num_adults": lead.num_adults,
-            "num_children": lead.num_children,
-            "num_infants": lead.num_infants,
-            "budget": lead.budget,
-            "notes": lead.notes,
-            "assigned_to": lead.assigned_to,
-            "b2b_partner_id": lead.b2b_partner_id,
-            "created_at": lead.created_at,
-            "customer": {
-                "id": lead.customer.id,
-                "name": lead.customer.name,
-                "phone": lead.customer.phone,
-                "email": lead.customer.email,
-                "whatsapp_number": lead.customer.whatsapp_number,
-            } if lead.customer else None,
-            "b2b_partner": {
-                "id": lead.b2b_partner.id,
-                "company_name": lead.b2b_partner.company_name,
-                "category": lead.b2b_partner.category.value if hasattr(lead.b2b_partner.category, "value") else (lead.b2b_partner.category if lead.b2b_partner else None),
-            } if lead.b2b_partner else None,
-        }
-        result_items.append(lead_dict)
+        # Add customer and b2b info to leads
+        result_items = []
+        for lead in leads:
+            lead_dict = {
+                "id": lead.id,
+                "customer_id": lead.customer_id,
+                "source": lead.source.value if hasattr(lead.source, "value") else (lead.source or ""),
+                "stage": lead.stage.value if hasattr(lead.stage, "value") else (lead.stage or ""),
+                "destination": lead.destination,
+                "trip_type": lead.trip_type,
+                "travel_date": lead.travel_date,
+                "num_adults": lead.num_adults,
+                "num_children": lead.num_children,
+                "num_infants": lead.num_infants,
+                "budget": lead.budget,
+                "notes": lead.notes,
+                "assigned_to": lead.assigned_to,
+                "b2b_partner_id": lead.b2b_partner_id,
+                "created_at": lead.created_at,
+                "customer": {
+                    "id": lead.customer.id,
+                    "name": lead.customer.name,
+                    "phone": lead.customer.phone,
+                    "email": lead.customer.email,
+                    "whatsapp_number": lead.customer.whatsapp_number,
+                } if lead.customer else None,
+                "b2b_partner": {
+                    "id": lead.b2b_partner.id,
+                    "company_name": lead.b2b_partner.company_name,
+                    "category": lead.b2b_partner.category.value if hasattr(lead.b2b_partner.category, "value") else (lead.b2b_partner.category if lead.b2b_partner else None),
+                } if lead.b2b_partner else None,
+            }
+            result_items.append(lead_dict)
 
-    return PaginatedLeads(
-        items=result_items,
-        total=total,
-        page=page,
-        pages=(total + per_page - 1) // per_page,
-        per_page=per_page,
-    )
+        return PaginatedLeads(
+            items=result_items,
+            total=total,
+            page=page,
+            pages=(total + per_page - 1) // per_page,
+            per_page=per_page,
+        )
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("", response_model=LeadOut, status_code=201)

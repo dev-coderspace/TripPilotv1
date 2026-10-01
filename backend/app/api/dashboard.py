@@ -39,19 +39,19 @@ def dashboard_summary(
 
 @router.get("/leads-by-source")
 def leads_by_source(db: Session = Depends(get_db), current_user: User = Depends(require_permission("dashboard", "read"))):
-    rows = db.query(Lead.source, func.count(Lead.id)).filter(Lead.org_id == current_user.org_id, or_(Lead.is_deleted == False, Lead.is_deleted == 0, Lead.is_deleted.is_(None))).group_by(Lead.source).all()
+    rows = db.query(Lead.source, func.count(Lead.id)).filter(Lead.org_id == current_user.org_id, or_(Lead.is_deleted == False, Lead.is_deleted.is_(None))).group_by(Lead.source).all()
     return [{"source": (r[0].value if hasattr(r[0], "value") else str(r[0])) if r[0] else "unknown", "count": r[1]} for r in rows]
 
 
 @router.get("/leads-by-stage")
 def leads_by_stage(db: Session = Depends(get_db), current_user: User = Depends(require_permission("dashboard", "read"))):
-    rows = db.query(Lead.stage, func.count(Lead.id)).filter(Lead.org_id == current_user.org_id, or_(Lead.is_deleted == False, Lead.is_deleted == 0, Lead.is_deleted.is_(None))).group_by(Lead.stage).all()
+    rows = db.query(Lead.stage, func.count(Lead.id)).filter(Lead.org_id == current_user.org_id, or_(Lead.is_deleted == False, Lead.is_deleted.is_(None))).group_by(Lead.stage).all()
     return [{"stage": (r[0].value if hasattr(r[0], "value") else str(r[0])) if r[0] else "unknown", "count": r[1]} for r in rows]
 
 
 @router.get("/leaderboard")
 def team_leaderboard(db: Session = Depends(get_db), current_user: User = Depends(require_permission("dashboard", "read"))):
-    not_deleted = or_(Lead.is_deleted == False, Lead.is_deleted == 0, Lead.is_deleted.is_(None))
+    not_deleted = or_(Lead.is_deleted == False, Lead.is_deleted.is_(None))
     rows = db.query(
         User.name,
         func.count(Lead.id).label("leads"),
@@ -68,7 +68,7 @@ async def get_ai_insights(
     try:
         leads = (
             db.query(Lead)
-            .filter(Lead.org_id == current_user.org_id, or_(Lead.is_deleted == False, Lead.is_deleted == 0, Lead.is_deleted.is_(None)))
+            .filter(Lead.org_id == current_user.org_id, or_(Lead.is_deleted == False, Lead.is_deleted.is_(None)))
             .order_by(Lead.created_at.desc())
             .limit(30)
             .all()
