@@ -71,7 +71,7 @@ class LeadUpdate(BaseModel):
 
 
 class LeadCustomerOut(BaseModel):
-    id: int
+    id: Optional[int] = None
     name: Optional[str] = "Unknown"
     phone: Optional[str] = "—"
     email: Optional[str] = None
@@ -82,8 +82,8 @@ class LeadCustomerOut(BaseModel):
 
 
 class B2BPartnerBrief(BaseModel):
-    id: int
-    company_name: str
+    id: Optional[int] = None
+    company_name: Optional[str] = ""
     category: Optional[str] = None
 
     class Config:
@@ -91,8 +91,8 @@ class B2BPartnerBrief(BaseModel):
 
 
 class LeadOut(BaseModel):
-    id: int
-    customer_id: int
+    id: Optional[int] = None
+    customer_id: Optional[int] = None
     source: Optional[str] = "manual"
     stage: Optional[str] = "fresh"
     destination: Optional[str] = None
@@ -123,11 +123,11 @@ class AILeadInput(BaseModel):
 
 
 class PaginatedLeads(BaseModel):
-    items: List[LeadOut]
-    total: int
-    page: int
-    pages: int
-    per_page: int
+    items: List[Union[LeadOut, dict]]
+    total: int = 0
+    page: int = 1
+    pages: int = 1
+    per_page: int = 20
 
 
 # ─── Routes ──────────────────────────────────────────────────────────────────
