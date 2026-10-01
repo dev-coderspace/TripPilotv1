@@ -144,14 +144,16 @@ def list_leads(
     date_from: Optional[date] = None,
     date_to: Optional[date] = None,
     customer_id: Optional[int] = None,
+    org_id: Optional[int] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permission("leads", "read")),
 ):
     q = db.query(Lead).filter(
-        Lead.org_id == current_user.org_id,
         or_(Lead.is_deleted == False, Lead.is_deleted == None)
     )
 
+    if org_id:
+        q = q.filter(Lead.org_id == org_id)
     if customer_id:
         q = q.filter(Lead.customer_id == customer_id)
     if search:
@@ -182,8 +184,8 @@ def list_leads(
         lead_dict = {
             "id": lead.id,
             "customer_id": lead.customer_id,
-            "source": lead.source.value if lead.source else "",
-            "stage": lead.stage.value if lead.stage else "",
+            "source": lead.source.value if hasattr(lead.source, "value") else (lead.source or ""),
+            "stage": lead.stage.value if hasattr(lead.stage, "value") else (lead.stage or ""),
             "destination": lead.destination,
             "trip_type": lead.trip_type,
             "travel_date": lead.travel_date,
@@ -205,7 +207,7 @@ def list_leads(
             "b2b_partner": {
                 "id": lead.b2b_partner.id,
                 "company_name": lead.b2b_partner.company_name,
-                "category": lead.b2b_partner.category.value if lead.b2b_partner.category else None,
+                "category": lead.b2b_partner.category.value if hasattr(lead.b2b_partner.category, "value") else (lead.b2b_partner.category if lead.b2b_partner else None),
             } if lead.b2b_partner else None,
         }
         result_items.append(lead_dict)
@@ -285,7 +287,6 @@ def get_today_reminders(
 def get_lead(lead_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     lead = db.query(Lead).filter(
         Lead.id == lead_id,
-        Lead.org_id == current_user.org_id,
         or_(Lead.is_deleted == False, Lead.is_deleted == None)
     ).first()
     if not lead:
@@ -306,13 +307,12 @@ def get_lead_workspace(
 
     lead = db.query(Lead).filter(
         Lead.id == lead_id,
-        Lead.org_id == current_user.org_id,
         or_(Lead.is_deleted == False, Lead.is_deleted == None)
     ).first()
     if not lead:
         raise HTTPException(status_code=404, detail="Lead not found")
 
-    org_id = current_user.org_id
+    org_id = lead.org_id
 
     itineraries = db.query(Itinerary).filter(
         Itinerary.org_id == org_id, Itinerary.lead_id == lead_id
@@ -636,7 +636,7 @@ def export_leads_csv(
 ):
     leads = (
         db.query(Lead)
-        .filter(Lead.org_id == current_user.org_id, or_(Lead.is_deleted == False, Lead.is_deleted == None))
+        .filter(or_(Lead.is_deleted == False, Lead.is_deleted == None))
         .order_by(Lead.created_at.desc())
         .all()
     )
@@ -644,13 +644,15 @@ def export_leads_csv(
     writer = csv.writer(output)
     writer.writerow(["ID", "Customer Name", "Phone", "Email", "Source", "Stage", "Destination", "Budget", "Created At"])
     for lead in leads:
+        source_val = lead.source.value if hasattr(lead.source, "value") else (lead.source or "")
+        stage_val = lead.stage.value if hasattr(lead.stage, "value") else (lead.stage or "")
         writer.writerow([
             lead.id,
             lead.customer.name if lead.customer else "",
             lead.customer.phone if lead.customer else "",
             lead.customer.email if lead.customer else "",
-            lead.source.value if lead.source else "",
-            lead.stage.value if lead.stage else "",
+            source_val,
+            stage_val,
             lead.destination or "",
             lead.budget or "",
             lead.created_at.strftime("%Y-%m-%d %H:%M") if lead.created_at else "",
