@@ -29,6 +29,12 @@ import { useMasterDataByCategory } from "@/hooks/useMasterData";
 interface Props {
   leads: any[];
   loading: boolean;
+  total?: number;
+  page?: number;
+  perPage?: number;
+  pages?: number;
+  onPageChange?: (page: number) => void;
+  onPerPageChange?: (perPage: number) => void;
   onEdit: (lead: any) => void;
   onDelete: (id: number) => void;
   onViewDetails: (id: number) => void;
@@ -70,6 +76,12 @@ const TH = "text-left font-semibold text-xs uppercase tracking-wide text-muted-f
 export default function LeadTable({
   leads,
   loading,
+  total,
+  page,
+  perPage,
+  pages,
+  onPageChange,
+  onPerPageChange,
   onEdit,
   onDelete,
   onViewDetails,
@@ -83,13 +95,38 @@ export default function LeadTable({
   const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
   const triggerRefs = useRef<Record<number, HTMLButtonElement | null>>({});
 
-  // Pagination state
-  const [currentPage, setCurrentPage] = useState<number>(1);
-  const [pageSize, setPageSize] = useState<number>(10);
+  // Pagination state (supports server-side controlled or fallback client-side)
+  const [internalPage, setInternalPage] = useState<number>(1);
+  const [internalPageSize, setInternalPageSize] = useState<number>(10);
+
+  const isServerPaginated = onPageChange !== undefined;
+  const currentPage = page !== undefined ? page : internalPage;
+  const pageSize = perPage !== undefined ? perPage : internalPageSize;
+  const totalCount = total !== undefined ? total : leads.length;
+  const totalPages = pages !== undefined ? pages : (totalCount > 0 ? Math.ceil(totalCount / pageSize) : 1);
+
+  const handlePageChange = (newPage: number) => {
+    if (onPageChange) {
+      onPageChange(newPage);
+    } else {
+      setInternalPage(newPage);
+    }
+  };
+
+  const handlePageSizeChange = (newSize: number) => {
+    if (onPerPageChange) {
+      onPerPageChange(newSize);
+    } else {
+      setInternalPageSize(newSize);
+      setInternalPage(1);
+    }
+  };
 
   useEffect(() => {
-    setCurrentPage(1);
-  }, [leads.length]);
+    if (!isServerPaginated) {
+      setInternalPage(1);
+    }
+  }, [leads.length, isServerPaginated]);
 
   function toggleStageMenu(leadId: number) {
     if (openDropdown === leadId) {
@@ -145,8 +182,9 @@ export default function LeadTable({
     );
   }
 
-  const totalPages = Math.ceil(leads.length / pageSize) || 1;
-  const paginatedLeads = leads.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+  const displayLeads = isServerPaginated
+    ? leads
+    : leads.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   // Count leads per customer (by phone or email) on the current page to detect duplicates
   const customerCounts = leads.reduce((acc: Record<string, number>, item) => {
@@ -176,7 +214,7 @@ export default function LeadTable({
           </tr>
         </thead>
         <tbody>
-          {paginatedLeads.map((lead) => {
+          {displayLeads.map((lead) => {
             const stage = STAGE_STYLES[lead.stage] || { label: lead.stage || "—", className: "bg-gray-100 text-gray-600 border-gray-200" };
             const customer = lead.customer;
             const phone = customer?.phone;
@@ -386,11 +424,8 @@ export default function LeadTable({
           <span>Rows per page:</span>
           <select
             value={pageSize}
-            onChange={(e) => {
-              setPageSize(Number(e.target.value));
-              setCurrentPage(1);
-            }}
-            className="h-8 px-2 py-1 bg-background border border-input rounded-md font-medium text-foreground focus:outline-none"
+            onChange={(e) => handlePageSizeChange(Number(e.target.value))}
+            className="h-8 px-2 py-1 bg-background border border-input rounded-md font-medium text-foreground focus:outline-none cursor-pointer"
           >
             {[10, 20, 50, 100].map((size) => (
               <option key={size} value={size}>
@@ -399,9 +434,9 @@ export default function LeadTable({
             ))}
           </select>
           <span className="ml-2">
-            Showing <span className="font-semibold text-foreground">{leads.length > 0 ? (currentPage - 1) * pageSize + 1 : 0}</span> to{" "}
-            <span className="font-semibold text-foreground">{Math.min(currentPage * pageSize, leads.length)}</span> of{" "}
-            <span className="font-semibold text-foreground">{leads.length}</span> leads
+            Showing <span className="font-semibold text-foreground">{totalCount > 0 ? (currentPage - 1) * pageSize + 1 : 0}</span> to{" "}
+            <span className="font-semibold text-foreground">{Math.min(currentPage * pageSize, totalCount)}</span> of{" "}
+            <span className="font-semibold text-foreground">{totalCount}</span> leads
           </span>
         </div>
 
@@ -409,8 +444,8 @@ export default function LeadTable({
           <Button
             variant="outline"
             size="sm"
-            onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
-            disabled={currentPage === 1}
+            onClick={() => handlePageChange(Math.max(currentPage - 1, 1))}
+            disabled={currentPage <= 1}
             className="h-8 px-2.5 flex items-center gap-1 text-xs"
           >
             <ChevronLeft className="w-4 h-4" />
@@ -427,7 +462,7 @@ export default function LeadTable({
               return (
                 <button
                   key={pageNum}
-                  onClick={() => setCurrentPage(pageNum)}
+                  onClick={() => handlePageChange(pageNum)}
                   className={`w-8 h-8 rounded-md text-xs font-semibold transition-colors ${
                     currentPage === pageNum
                       ? "bg-primary text-primary-foreground"
@@ -443,8 +478,8 @@ export default function LeadTable({
           <Button
             variant="outline"
             size="sm"
-            onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
-            disabled={currentPage === totalPages}
+            onClick={() => handlePageChange(Math.min(currentPage + 1, totalPages))}
+            disabled={currentPage >= totalPages}
             className="h-8 px-2.5 flex items-center gap-1 text-xs"
           >
             Next

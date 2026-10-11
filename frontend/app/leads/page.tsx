@@ -9,7 +9,6 @@ import { PageHeader, PageContainer } from "@/components/layout";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Separator } from "@/components/ui/separator";
 import { leadsApi } from "@/lib/api";
 import { useToast } from "@/components/Toast";
 import { useAuth } from "@/context/AuthContext";
@@ -31,6 +30,7 @@ export default function LeadsPage() {
   const [leads, setLeads] = useState<any[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
+  const [perPage, setPerPage] = useState(10);
   const [pages, setPages] = useState(1);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
@@ -45,8 +45,6 @@ export default function LeadsPage() {
 
   const fetchLeads = useCallback(async () => {
     setLoading(true);
-    setLeads([]);
-    setTotal(0);
     try {
       if (tab === "today-reminders") {
         const data = await leadsApi.getTodayReminders();
@@ -54,7 +52,7 @@ export default function LeadsPage() {
         setTotal(data?.length || 0);
         setPages(1);
       } else {
-        const params: any = { page, per_page: 20, ...filters };
+        const params: any = { page, per_page: perPage, ...filters };
         if (debouncedSearch) params.search = debouncedSearch;
         if (tab === "unassigned") {
           params.unassigned = true;
@@ -71,7 +69,7 @@ export default function LeadsPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, debouncedSearch, filters, tab]);
+  }, [page, perPage, debouncedSearch, filters, tab]);
 
   useEffect(() => {
     fetchLeads();
@@ -278,6 +276,15 @@ export default function LeadsPage() {
             <LeadTable
               leads={leads}
               loading={loading}
+              total={total}
+              page={page}
+              perPage={perPage}
+              pages={pages}
+              onPageChange={(p) => setPage(p)}
+              onPerPageChange={(s) => {
+                setPerPage(s);
+                setPage(1);
+              }}
               onEdit={(lead) => {
                 setEditLead(lead);
                 setUseAiForAdd(false);
@@ -297,55 +304,6 @@ export default function LeadsPage() {
                 setPage(1);
               }}
             />
-
-            {/* Pagination */}
-            {!loading && pages > 1 && (
-              <>
-                <Separator />
-                <div className="p-6 flex items-center justify-between bg-muted/50">
-                  <span className="text-sm text-muted-foreground">
-                    Showing <strong>Page {page} of {pages}</strong> • {total} total leads
-                  </span>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setPage(1)}
-                      disabled={page === 1}
-                    >
-                      «
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setPage((p) => Math.max(1, p - 1))}
-                      disabled={page === 1}
-                    >
-                      ‹
-                    </Button>
-                    <span className="px-3 text-sm font-semibold">
-                      {page} / {pages}
-                    </span>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setPage((p) => Math.min(pages, p + 1))}
-                      disabled={page === pages}
-                    >
-                      ›
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setPage(pages)}
-                      disabled={page === pages}
-                    >
-                      »
-                    </Button>
-                  </div>
-                </div>
-              </>
-            )}
           </CardContent>
         </Card>
       </div>
