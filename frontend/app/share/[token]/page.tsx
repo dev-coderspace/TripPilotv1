@@ -551,11 +551,6 @@ export default function PublicShareItineraryPage({ params }: { params: Promise<{
                         }}>
                           <div>
                             <span style={{ fontSize: 11, color: "#a0aec0", textTransform: "uppercase", letterSpacing: 1, fontWeight: 600 }}>Total Cost</span>
-                            {perPersonCost && (
-                              <div style={{ fontSize: 12, color: "#d4af37", marginTop: 2, fontWeight: 600 }}>
-                                ({fmtINR(perPersonCost)} / Person)
-                              </div>
-                            )}
                           </div>
                           <div style={{ fontSize: "1.3rem", fontWeight: 800, color: "#00b4d8", fontFamily: "Outfit, sans-serif" }}>
                             {grp.totalCost ? fmtINR(grp.totalCost) : "On Request"}
