@@ -32,6 +32,7 @@ const NAV = [
     icon: TrendingUp, label: "Reports", href: "/reports", screen: "leads",
     sub: [
       { label: "Payment Report", href: "/reports/payment", screen: "leads" },
+      { label: "Profit & Loss", href: "/reports/profit-loss", screen: "leads" },
     ],
   },
   {

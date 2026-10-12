@@ -257,6 +257,18 @@ export const reportsApi = {
     const qs = Object.keys(cleanParams).length ? "?" + new URLSearchParams(cleanParams).toString() : "";
     return api.get<any>(`/reports/payment${qs}`);
   },
+  profitLossReport: (params?: Record<string, string | number | boolean | undefined>) => {
+    const cleanParams: Record<string, string> = {};
+    if (params) {
+      Object.entries(params).forEach(([k, v]) => {
+        if (v !== undefined && v !== null && v !== "" && v !== "all") {
+          cleanParams[k] = String(v);
+        }
+      });
+    }
+    const qs = Object.keys(cleanParams).length ? "?" + new URLSearchParams(cleanParams).toString() : "";
+    return api.get<any>(`/reports/profit-loss${qs}`);
+  },
 };
 
 // ── Inventory ──
